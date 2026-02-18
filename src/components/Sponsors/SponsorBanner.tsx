@@ -10,30 +10,52 @@ export default function SponsorBanner(): React.JSX.Element {
   const [loading, setLoading] = useState<boolean>(true);
   const [data, setData] = useState<string | null>(null);
   const [counter, setCounter] = useState<number>(0);
-  const [seconds, setSeconds] = useState<number>(0);
+  const [page, setPage] = useState<number>(0);
   const { colorMode } = useColorMode();
 
-  const countUp = (stateFunc: React.Dispatch<React.SetStateAction<number>>, intervalMs: number): (() => void) => {
-    const interval = setInterval(() => {
-      stateFunc((x) => x + 1);
-    }, intervalMs);
+  const makeLinksOpenInNewTab = (html: string): string => {
+    if (typeof window === 'undefined' || typeof DOMParser === 'undefined') {
+      return html;
+    }
 
-    return () => clearInterval(interval);
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+
+    doc.querySelectorAll('a').forEach((anchor) => {
+      anchor.setAttribute('target', '_blank');
+
+      const existingRel = anchor.getAttribute('rel');
+      const parts = new Set<string>([
+        'noopener',
+        'noreferrer',
+        ...(existingRel ? existingRel.split(' ') : []),
+      ]);
+
+      anchor.setAttribute('rel', Array.from(parts).join(' '));
+    });
+
+    return doc.body.innerHTML;
   };
 
   useEffect(() => {
-    return countUp(setCounter, cycleIntervalMs);
-  }, []);
+    const interval = setInterval(() => {
+      setPage((prevPage) => {
+        const nextPage = (prevPage + 1) % 5;
+        setCounter((prevCounter) => prevCounter + 1);
+        return nextPage;
+      });
+    }, cycleIntervalMs / 5);
 
-  useEffect(() => {
-    return countUp(setSeconds, cycleIntervalMs / 5);
+    return () => clearInterval(interval);
   }, []);
 
   async function fetchData(mode: string, page: string): Promise<void> {
     const response = await fetch(`https://build.betaflight.com/api/app/sponsors/${mode}/${page}`);
     setLoading(true);
     setTimeout(async () => {
-      setData(await response.text());
+      const rawHtml = await response.text();
+      const processedHtml = makeLinksOpenInNewTab(rawHtml);
+      setData(processedHtml);
       setLoading(false);
     }, 1000);
   }
@@ -52,12 +74,19 @@ export default function SponsorBanner(): React.JSX.Element {
           Loading...
         </div>
       )}
-      <div className="justify-center flex gap-4 mt-4">
-        {[...Array((seconds % 5) + 1)].map((_, i) => (
-          <div key={i} className="transition-all w-4 h-4 rounded-full bg-gray-500/20 border border-transparent" />
-        ))}
-        {[...Array(5 - (seconds % 5) - 1)].map((_, i) => (
-          <div key={i} className="w-4 h-4 rounded-full border bg-transparent border-gray-500/20" />
+      <div className="flex gap-4 justify-center mt-4">
+        {[...Array(5)].map((_, i) => (
+          <button
+            key={i}
+            type="button"
+            className={`transition-all w-4 h-4 rounded-full border ${
+              i <= page ? 'bg-gray-500/60 border-transparent' : 'bg-transparent border-gray-500/20'
+            }`}
+            onClick={() => {
+              setPage(i);
+              setCounter((prevCounter) => prevCounter + 1);
+            }}
+          />
         ))}
       </div>
     </div>
